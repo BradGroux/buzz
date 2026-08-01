@@ -348,6 +348,16 @@ with a TypeScript lookup table or an id comparison in a component.
     for resets; owner replay of a redacted head preserves only a nonportable
     local override. That local path is not synchronized through catalog heads.
 
+20. **Capability manifests project evidence; they never infer it.**
+    `lib/capabilityManifest.ts` combines `KnownAcpRuntime` facts,
+    managed-agent lifecycle, presence, and the encrypted owner observer stream.
+    A missing runtime field is `unknown`, an explicit `false` is
+    `unavailable`, and only a supplied fact is `reported`. Manifest projection
+    is allowlist-only: do not surface raw config, executable commands,
+    arguments, environment variables, prompts, paths, credentials, tool inputs,
+    or tool results.
+
+
 ## Channel-only runtime controls
 
 Desktop observer controls identify a channel, not a thread session. The harness
@@ -422,8 +432,6 @@ buzz messages send --channel <channel-id> --reply-to <thread-root-id> \
 - Rust: `runtime_metadata_env_vars` tests pin spawn-time key application.
 - Rust: persona sharing/retention tests pin relay+owner scoping, durable
   enqueue errors, relay rejection/unavailability, and accepted publication.
-- Rust: `definition_validation` and inbound persona tests pin the shared
-  Unicode/control-character policy at local, import, publish, and sync gates.
 
 ## Managed avatar media
 
