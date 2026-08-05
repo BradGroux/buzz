@@ -239,7 +239,9 @@ pub fn build_message(
         tags.push(tag(&["broadcast", "1"])?);
     }
     imeta_tags(media_tags, &mut tags)?;
-    Ok(EventBuilder::new(Kind::Custom(9), content).tags(tags).allow_self_tagging())
+    Ok(EventBuilder::new(Kind::Custom(9), content)
+        .tags(tags)
+        .allow_self_tagging())
 }
 
 /// Build an encrypted agent observer frame (kind 24200).
@@ -290,7 +292,9 @@ pub fn build_forum_post(
     let mut tags = vec![tag(&["h", &channel_id.to_string()])?];
     mention_tags(mentions, &mut tags)?;
     imeta_tags(media_tags, &mut tags)?;
-    Ok(EventBuilder::new(Kind::Custom(45001), content).tags(tags).allow_self_tagging())
+    Ok(EventBuilder::new(Kind::Custom(45001), content)
+        .tags(tags)
+        .allow_self_tagging())
 }
 
 /// Build a forum comment reply (kind 45003).
@@ -306,7 +310,9 @@ pub fn build_forum_comment(
     thread_tags(thread_ref, &mut tags)?;
     mention_tags(mentions, &mut tags)?;
     imeta_tags(media_tags, &mut tags)?;
-    Ok(EventBuilder::new(Kind::Custom(45003), content).tags(tags).allow_self_tagging())
+    Ok(EventBuilder::new(Kind::Custom(45003), content)
+        .tags(tags)
+        .allow_self_tagging())
 }
 
 /// Build a diff/patch message (kind 40008).
