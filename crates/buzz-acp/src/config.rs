@@ -1415,13 +1415,10 @@ pub fn resolve_channel_filters(
             }
         }
         SubscribeMode::All => {
-            let kinds = config.kinds_override.clone().unwrap_or_else(|| {
-                vec![
-                    KIND_STREAM_MESSAGE,
-                    KIND_WORKFLOW_APPROVAL_REQUESTED,
-                    KIND_STREAM_REMINDER,
-                ]
-            });
+            let kinds = config
+                .kinds_override
+                .clone()
+                .unwrap_or_else(default_mention_kinds);
             for ch in &target_channels {
                 result.insert(
                     *ch,
@@ -1513,13 +1510,12 @@ pub fn resolve_dynamic_channel_filter(
             require_mention: !config.no_mention_filter,
         }),
         SubscribeMode::All => Some(ChannelFilter {
-            kinds: Some(config.kinds_override.clone().unwrap_or_else(|| {
-                vec![
-                    KIND_STREAM_MESSAGE,
-                    KIND_WORKFLOW_APPROVAL_REQUESTED,
-                    KIND_STREAM_REMINDER,
-                ]
-            })),
+            kinds: Some(
+                config
+                    .kinds_override
+                    .clone()
+                    .unwrap_or_else(default_mention_kinds),
+            ),
             require_mention: false,
         }),
         SubscribeMode::Config => {
@@ -1946,14 +1942,12 @@ mod tests {
         let config = test_config(SubscribeMode::All);
         let channels = vec![Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
         let result = resolve_channel_filters(&config, &channels, &[]);
+        let expected = default_mention_kinds();
 
         assert_eq!(result.len(), 3);
         for ch in &channels {
             let f = result.get(ch).unwrap();
-            let kinds = f.kinds.as_ref().expect("All mode must have explicit kinds");
-            assert!(kinds.contains(&buzz_core::kind::KIND_STREAM_MESSAGE), "must include kind:9");
-            assert!(kinds.contains(&buzz_core::kind::KIND_WORKFLOW_APPROVAL_REQUESTED), "must include kind:46010");
-            assert!(kinds.contains(&buzz_core::kind::KIND_STREAM_REMINDER), "must include kind:40007");
+            assert_eq!(f.kinds.as_deref(), Some(expected.as_slice()));
             assert!(!f.require_mention, "All mode must not require mention");
         }
     }
@@ -1979,10 +1973,7 @@ mod tests {
         let result = resolve_dynamic_channel_filter(&config, ch, &[]);
 
         let f = result.expect("All mode must return a filter");
-        let kinds = f.kinds.as_ref().expect("All mode must have explicit kinds");
-        assert!(kinds.contains(&buzz_core::kind::KIND_STREAM_MESSAGE), "must include kind:9");
-        assert!(kinds.contains(&buzz_core::kind::KIND_WORKFLOW_APPROVAL_REQUESTED), "must include kind:46010");
-        assert!(kinds.contains(&buzz_core::kind::KIND_STREAM_REMINDER), "must include kind:40007");
+        assert_eq!(f.kinds, Some(default_mention_kinds()));
         assert!(!f.require_mention, "All mode must not require mention");
     }
 
