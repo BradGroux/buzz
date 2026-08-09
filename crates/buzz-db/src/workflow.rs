@@ -868,6 +868,63 @@ pub async fn delete_workflow_and_definition_for_owner(
     })
 }
 
+/// Tombstone an orphaned workflow definition under the same coordinate lock
+/// used by definition replacement ingest.
+///
+/// This is the definition-only repair path for a missing workflow row. Taking
+/// the replacement lock prevents a concurrent replacement from committing
+/// after the tombstone and making the orphan live again.
+pub async fn delete_workflow_definition_for_owner(
+    pool: &PgPool,
+    community_id: CommunityId,
+    owner_pubkey: &[u8],
+    d_tag: &str,
+    deletion_created_at_secs: i64,
+) -> Result<WorkflowLifecycleDeleteResult> {
+    let deletion_created_at = DateTime::from_timestamp(deletion_created_at_secs, 0)
+        .ok_or(DbError::InvalidTimestamp(deletion_created_at_secs))?;
+    let mut tx = pool.begin().await?;
+
+    let lock_key = crate::event_replacement_lock_key(
+        community_id,
+        KIND_WORKFLOW_DEF as i32,
+        owner_pubkey,
+        Some(d_tag.as_bytes()),
+    );
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(lock_key)
+        .execute(tx.as_mut())
+        .await?;
+
+    let definition_rows = sqlx::query(
+        "UPDATE events SET deleted_at = NOW() \
+         WHERE community_id = $1 AND kind = $2 AND pubkey = $3 AND d_tag = $4 \
+           AND deleted_at IS NULL AND created_at <= $5 \
+         RETURNING channel_id",
+    )
+    .bind(community_id.as_uuid())
+    .bind(KIND_WORKFLOW_DEF as i32)
+    .bind(owner_pubkey)
+    .bind(d_tag)
+    .bind(deletion_created_at)
+    .fetch_all(tx.as_mut())
+    .await?;
+    let definition_events_deleted = definition_rows.len() as u64;
+    let mut affected_channel_ids = BTreeSet::new();
+    for row in definition_rows {
+        if let Some(channel_id) = row.try_get::<Option<Uuid>, _>("channel_id")? {
+            affected_channel_ids.insert(channel_id);
+        }
+    }
+
+    tx.commit().await?;
+    Ok(WorkflowLifecycleDeleteResult {
+        workflow_deleted: false,
+        affected_channel_ids: affected_channel_ids.into_iter().collect(),
+        definition_events_deleted,
+    })
+}
+
 // -- Workflow Run CRUD --------------------------------------------------------
 
 /// Insert a new workflow run. Returns the new run's UUID.

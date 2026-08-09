@@ -4038,6 +4038,25 @@ impl Db {
         .await
     }
 
+    /// Tombstone an orphaned workflow definition under the coordinate lock
+    /// shared with definition replacement ingest.
+    pub async fn delete_workflow_definition_for_owner(
+        &self,
+        community_id: CommunityId,
+        owner_pubkey: &[u8],
+        d_tag: &str,
+        deletion_created_at_secs: i64,
+    ) -> Result<workflow::WorkflowLifecycleDeleteResult> {
+        workflow::delete_workflow_definition_for_owner(
+            &self.pool,
+            community_id,
+            owner_pubkey,
+            d_tag,
+            deletion_created_at_secs,
+        )
+        .await
+    }
+
     /// Find a workflow by owner pubkey and name within a community. Used for
     /// NIP-09 a-tag deletion where the d-tag is the workflow name (not UUID).
     #[datastore_span(name = "find_workflow_by_owner_and_name", system = "postgresql")]

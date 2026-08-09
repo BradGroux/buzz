@@ -2193,11 +2193,10 @@ async fn handle_a_tag_deletion(
                         );
                     }
                     Ok(None) => {
-                        let definition_deleted = state
+                        let result = state
                             .db
-                            .soft_delete_by_coordinate(
+                            .delete_workflow_definition_for_owner(
                                 tenant.community(),
-                                buzz_core::kind::KIND_WORKFLOW_DEF as i32,
                                 &owner_pubkey,
                                 d_tag,
                                 event.created_at.as_secs() as i64,
@@ -2210,9 +2209,14 @@ async fn handle_a_tag_deletion(
                             })?;
                         tracing::info!(
                             name = d_tag,
-                            definition_deleted,
+                            definition_events_deleted = result.definition_events_deleted,
                             "NIP-09 a-tag deletion: no workflow row; tombstoned definition coordinate"
                         );
+                        for channel_id in result.affected_channel_ids {
+                            state
+                                .workflow_engine
+                                .invalidate_channel_workflows(tenant.community(), channel_id);
+                        }
                     }
                     Err(e) => {
                         tracing::warn!("NIP-09 a-tag deletion: DB lookup failed: {e}");
