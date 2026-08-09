@@ -162,6 +162,7 @@ async fn workflow_add_reaction_emits_kind_7_and_continues() {
     assert_eq!(reaction.content, "👀");
     assert!(has_tag(&reaction, "e", &target.id.to_hex()));
     assert!(has_tag(&reaction, "p", &keys.public_key().to_hex()));
+    assert!(has_tag(&reaction, "k", &KIND_STREAM_MESSAGE.to_string()));
     assert!(has_tag(&reaction, "actor", &keys.public_key().to_hex()));
     assert!(has_tag(&reaction, "buzz:workflow", "true"));
 

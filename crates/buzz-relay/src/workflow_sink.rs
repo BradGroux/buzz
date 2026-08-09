@@ -8,7 +8,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 
-use buzz_core::kind::{KIND_REACTION, KIND_STREAM_MESSAGE};
+use buzz_core::kind::{event_kind_u32, KIND_REACTION, KIND_STREAM_MESSAGE};
 use buzz_core::tenant::{CommunityId, TenantContext};
 use buzz_workflow::action_sink::{ActionSink, ActionSinkError, AddReactionOutcome};
 use chrono::Utc;
@@ -419,6 +419,7 @@ impl ActionSink for RelayActionSink {
                     ))
                 })?
                 .to_hex();
+            let target_kind = event_kind_u32(&target_event.event).to_string();
 
             let channel = state
                 .db
@@ -465,12 +466,14 @@ impl ActionSink for RelayActionSink {
             // NIP-25 subscriptions and push notifications reachable. A nonce keeps a rapid
             // delete-then-readd from reusing the same second-granularity event
             // ID and colliding with the soft-deleted kind:7 row.
-            let event = EventBuilder::new(Kind::from(KIND_REACTION as u16), &emoji)
+            let event = EventBuilder::new(Kind::from(KIND_REACTION as u16), normalized_emoji)
                 .tags([
                     Tag::parse(["e", &target_event_id.to_hex()])
                         .map_err(|e| ActionSinkError::EventBuild(format!("e tag: {e}")))?,
                     Tag::parse(["p", &target_author_hex])
                         .map_err(|e| ActionSinkError::EventBuild(format!("p tag: {e}")))?,
+                    Tag::parse(["k", &target_kind])
+                        .map_err(|e| ActionSinkError::EventBuild(format!("k tag: {e}")))?,
                     Tag::parse(["actor", &author_pubkey_hex])
                         .map_err(|e| ActionSinkError::EventBuild(format!("actor tag: {e}")))?,
                     Tag::parse(["buzz:workflow", "true"])
@@ -960,6 +963,11 @@ mod integration_tests {
             .event
             .tags
             .iter()
+            .any(|tag| { tag.as_slice() == ["k".to_string(), KIND_STREAM_MESSAGE.to_string()] }));
+        assert!(stored
+            .event
+            .tags
+            .iter()
             .any(|tag| { tag.as_slice() == ["actor".to_string(), owner_hex.clone()] }));
         assert!(stored
             .event
@@ -988,6 +996,38 @@ mod integration_tests {
             active_reaction.reaction_event_id.as_deref(),
             Some(reaction_id.as_bytes().as_slice())
         );
+
+        let empty_outcome = sink
+            .add_reaction(community, &target.id.to_hex(), "", &owner_hex)
+            .await
+            .expect("add default reaction");
+        let AddReactionOutcome::Added {
+            event_id: empty_event_id,
+        } = empty_outcome
+        else {
+            panic!("expected inserted default reaction, got {empty_outcome:?}");
+        };
+        let empty_event_id =
+            nostr::EventId::from_hex(&empty_event_id).expect("default reaction event id");
+        let empty_event = state
+            .db
+            .get_event_by_id(community, empty_event_id.as_bytes())
+            .await
+            .expect("query default reaction")
+            .expect("default reaction persisted");
+        assert_eq!(empty_event.event.content, "+");
+        assert!(state
+            .db
+            .get_active_reaction_record(
+                community,
+                target.id.as_bytes(),
+                target_created_at,
+                &owner_bytes,
+                "+",
+            )
+            .await
+            .expect("query default reaction row")
+            .is_some());
 
         let duplicate = sink
             .add_reaction(community, &target.id.to_hex(), "👀", &owner_hex)
