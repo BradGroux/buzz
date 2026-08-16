@@ -189,6 +189,15 @@ pub(super) async fn update_persona_with<R: Send + 'static>(
                 crate::managed_agents::effective_agent_description(description.as_deref());
             let about_changed = old_about != new_about;
 
+            // Capture the pre-edit respond_to so we can detect a behavior
+            // change and propagate it to linked instances. The persona stores
+            // respond_to in wire shape (Option<String>); the instance stores
+            // the typed enum + allowlist. Without this propagation, a
+            // respond_to-only edit saves to the definition but the instance
+            // keeps booting with the stale gate (#6026).
+            let old_respond_to = persona.respond_to.clone();
+            let old_respond_to_allowlist = persona.respond_to_allowlist.clone();
+
             persona.display_name = display_name;
             persona.avatar_url = avatar_url;
             persona.description = description;
@@ -209,17 +218,28 @@ pub(super) async fn update_persona_with<R: Send + 'static>(
             apply_persona_behavior(persona, input.behavior)?;
             persona.updated_at = now_iso();
 
+            // Detect whether the behavior group (respond_to mode + allowlist)
+            // changed. The persona stores wire-shape strings; a change to
+            // either the mode or the list means linked instances need their
+            // runtime `respond_to`/`respond_to_allowlist` updated — the fields
+            // `build_respond_to_env` reads at spawn (#6026).
+            let behavior_changed = persona.respond_to != old_respond_to
+                || persona.respond_to_allowlist != old_respond_to_allowlist;
+
             let result = persona.clone();
             save_personas(&app, &personas)?;
 
             let retained = retain(&app, &state, &result)?;
             try_regenerate_nest(&app);
 
-            // If the avatar, display_name, or effective description changed,
-            // propagate to linked agent records and collect relay profile sync
-            // params for the async phase. An about-only change touches no
-            // record bytes but still republishes each linked kind:0 profile.
-            let sync_params: ProfileSyncParams = if avatar_changed || name_changed || about_changed
+            // If the avatar, display_name, effective description, or behavior
+            // group changed, propagate to linked agent records and collect
+            // relay profile sync params for the async phase. An about-only
+            // change touches no record bytes but still republishes each linked
+            // kind:0 profile. The behavior propagation does not need a relay
+            // profile sync (it is not a name/avatar change), but it shares the
+            // same record-load-and-save cycle.
+            let sync_params: ProfileSyncParams = if avatar_changed || name_changed || about_changed || behavior_changed
             {
                 let mut records = load_managed_agents(&app)?;
                 let mut params: ProfileSyncParams = Vec::new();
@@ -255,6 +275,34 @@ pub(super) async fn update_persona_with<R: Send + 'static>(
                     );
 
                     agents_modified = agents_modified || update.record_changed;
+
+                    if behavior_changed {
+                        // Propagate the definition's behavioral gate onto the
+                        // instance's runtime fields. `build_respond_to_env`
+                        // reads `record.respond_to` / `record.respond_to_allowlist`
+                        // at spawn — not the `definition_*` fields — so without
+                        // this the instance keeps booting with the stale gate
+                        // while the UI shows the updated value (#6026).
+                        //
+                        // The persona stores `respond_to` in wire shape
+                        // (`Option<String>`); parse to the typed enum. An
+                        // absent value falls back to `OwnerOnly` (the default).
+                        record.respond_to = result
+                            .respond_to
+                            .as_deref()
+                            .and_then(|wire| {
+                                crate::managed_agents::RespondTo::parse_wire(wire).ok()
+                            })
+                            .unwrap_or_default();
+                        record.respond_to_allowlist =
+                            if record.respond_to == crate::managed_agents::RespondTo::Allowlist {
+                                result.respond_to_allowlist.clone()
+                            } else {
+                                Vec::new()
+                            };
+                        agents_modified = true;
+                    }
+
                     if update.profile_sync_required {
                         if let Ok(agent_keys) = nostr::Keys::parse(&record.private_key_nsec) {
                             let relay_url = crate::relay::effective_agent_relay_url(
