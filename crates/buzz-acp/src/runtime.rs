@@ -83,7 +83,7 @@ fn make_prompt_context(
     let base_prompt_content = config.base_prompt_content.as_ref();
     let cwd = current_working_directory()?;
     Ok(PromptContext {
-        mcp_servers: build_mcp_servers(config),
+        mcp_servers: build_mcp_servers(config)?,
         initial_message: config.initial_message.clone(),
         idle_timeout: Duration::from_secs(config.idle_timeout_secs),
         max_turn_duration: Duration::from_secs(config.max_turn_duration_secs),
