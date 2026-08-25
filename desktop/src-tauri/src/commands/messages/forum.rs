@@ -163,6 +163,13 @@ pub(super) fn apply_link_preview_suppression(
 /// `e` tag and any `link-preview` marker, which are already handled
 /// separately) are not folded — only the text changes.
 ///
+/// `owner_pubkeys` maps **agent pubkey → owner pubkey** (built by
+/// `fetch_agent_owner_pubkeys` from NIP-OA `auth` tags on kind:0 profiles).
+/// The lookup is one-directional: an owner can edit their agent's posts, but
+/// an agent cannot edit their owner's posts. When the original author is a
+/// human (no NIP-OA profile), the map has no entry, so only the author
+/// themself is authorized.
+///
 /// Returns the edited content when a valid edit exists, or `None` when the
 /// original should be used as-is.
 pub(super) fn fold_edit_content(
@@ -452,6 +459,23 @@ mod tests {
         let owners = std::collections::HashMap::new();
         let result = fold_edit_content(&original, std::slice::from_ref(&edit), &owners);
         assert!(result.is_none(), "edit targeting a different event must not apply");
+    }
+
+    #[test]
+    fn fold_edit_content_rejects_agent_editing_owner_post() {
+        // The owner_pubkeys map is agent → owner, not bidirectional.
+        // A human (owner) post must NOT be editable by their agent,
+        // because the map has no entry keyed by the human's pubkey.
+        let owner = Keys::generate();
+        let agent = Keys::generate();
+        let original = signed_event(&owner, 45001, Vec::new());
+        let edit = edit_event(&agent, "agent-edited", &original.id.to_hex(), nostr::Timestamp::now());
+        let owners = std::collections::HashMap::from([(
+            agent.public_key().to_hex(),
+            owner.public_key().to_hex(),
+        )]);
+        let result = fold_edit_content(&original, std::slice::from_ref(&edit), &owners);
+        assert!(result.is_none(), "agent must not edit owner's post");
     }
 
     #[test]
