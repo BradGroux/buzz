@@ -144,8 +144,8 @@ set, startup fails with an error explaining the conflict. Invalid JSON also
 fails startup — the agent does not launch with ambiguous arguments.
 
 **Producer behavior:** Desktop and the Kubernetes backend automatically select
-the appropriate transport. When no argument contains a comma, they write
-`BUZZ_ACP_AGENT_ARGS` (comma-joined). When any argument contains a comma, they
+the appropriate transport. When every argument is nonempty, comma-free, and unchanged by trimming, they write
+`BUZZ_ACP_AGENT_ARGS` (comma-joined). For commas, empty arguments, or edge whitespace, they
 serialize the argument list as JSON into `BUZZ_ACP_AGENT_ARGS_JSON` and set
 `BUZZ_ACP_AGENT_ARGS` to the default `"acp"`, which the harness treats as
 "not configured." This is transparent to the user — no manual env var

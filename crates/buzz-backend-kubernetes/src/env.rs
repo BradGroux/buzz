@@ -260,10 +260,15 @@ pub fn build_env(
         env.insert("BUZZ_ACP_AGENT_COMMAND".into(), command.to_string());
     }
     if !launch.args.is_empty() {
-        if launch.args.iter().any(|a| a.contains(',')) {
+        if launch
+            .args
+            .iter()
+            .any(|a| a.contains(',') || a.is_empty() || a.trim() != a)
+        {
             env.insert(
                 "BUZZ_ACP_AGENT_ARGS_JSON".into(),
-                serde_json::to_string(&launch.args).expect("Vec<String> is always serializable"),
+                serde_json::to_string(&launch.args)
+                    .map_err(|e| format!("serialize agent arguments: {e}"))?,
             );
             env.insert("BUZZ_ACP_AGENT_ARGS".into(), "acp".into());
         } else {
@@ -601,24 +606,27 @@ mod tests {
             "launch": {"command": "goose", "args": [], "owner_pubkey": "b"}
         }));
         assert!(!build(&agent).unwrap().contains_key("BUZZ_ACP_AGENT_ARGS"));
-        assert!(!build(&agent).unwrap().contains_key("BUZZ_ACP_AGENT_ARGS_JSON"));
+        assert!(!build(&agent)
+            .unwrap()
+            .contains_key("BUZZ_ACP_AGENT_ARGS_JSON"));
     }
 
     #[test]
-    fn args_containing_commas_use_json_transport() {
-        let agent = payload_json(serde_json::json!({
-            "launch": {
-                "command": "goose",
-                "args": ["--config=a,b", "--safe", "on"],
-                "owner_pubkey": "b"
-            }
-        }));
-        let env = build(&agent).unwrap();
-        assert_eq!(
-            env["BUZZ_ACP_AGENT_ARGS_JSON"],
-            r#"["--config=a,b","--safe","on"]"#
-        );
-        assert_eq!(env["BUZZ_ACP_AGENT_ARGS"], "acp");
+    fn lossy_legacy_arguments_use_json_transport() {
+        for args in [
+            vec!["--config=a,b", "--safe", "on"],
+            vec!["--label", ""],
+            vec![" padded "],
+        ] {
+            let agent = payload_json(serde_json::json!({
+                "launch": {"command": "goose", "args": args, "owner_pubkey": "b"}
+            }));
+            let env = build(&agent).unwrap();
+            let parsed: Vec<String> =
+                serde_json::from_str(&env["BUZZ_ACP_AGENT_ARGS_JSON"]).unwrap();
+            assert_eq!(parsed, args);
+            assert_eq!(env["BUZZ_ACP_AGENT_ARGS"], "acp");
+        }
     }
 
     /// The top-level `model`/`provider` fields are display inputs; their

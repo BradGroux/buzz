@@ -186,9 +186,7 @@ fn run_buzz_acp_auth_command_with_paths<const N: usize>(
         .args(args)
         .env("BUZZ_ACP_AGENT_COMMAND", adapter_path.as_os_str());
     crate::managed_agents::set_agent_args_env(&mut command, &agent_args);
-    command
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
     if let Some(workdir) = default_agent_workdir() {
         command.current_dir(workdir);
     }

@@ -958,9 +958,7 @@ pub fn resolve_agent_args(
 ) -> Result<Vec<String>, ConfigError> {
     match json_args {
         Some(json) if !json.trim().is_empty() => {
-            if !(legacy_args.is_empty()
-                || legacy_args.len() == 1 && legacy_args[0] == "acp")
-            {
+            if !(legacy_args.is_empty() || legacy_args.len() == 1 && legacy_args[0] == "acp") {
                 return Err(ConfigError::ConfigFile(
                     "BUZZ_ACP_AGENT_ARGS and BUZZ_ACP_AGENT_ARGS_JSON are both set; \
                      use only one. JSON is the canonical structured transport; \
@@ -982,9 +980,7 @@ pub fn resolve_agent_args(
             if parsed.is_empty() {
                 return Ok(default_args);
             }
-            if parsed.len() == 1
-                && parsed[0].eq_ignore_ascii_case("acp")
-                && default_args.is_empty()
+            if parsed.len() == 1 && parsed[0].eq_ignore_ascii_case("acp") && default_args.is_empty()
             {
                 return Ok(default_args);
             }
@@ -1847,10 +1843,7 @@ mod tests {
             Some(r#"["--config=C:\\Program Files\\Agent\\config.toml"]"#),
         )
         .unwrap();
-        assert_eq!(
-            args,
-            vec!["--config=C:\\Program Files\\Agent\\config.toml"]
-        );
+        assert_eq!(args, vec!["--config=C:\\Program Files\\Agent\\config.toml"]);
     }
 
     #[test]
@@ -1887,31 +1880,29 @@ mod tests {
         );
         assert!(result.is_err());
         let msg = format!("{}", result.unwrap_err());
-        assert!(msg.contains("both set"), "error should mention conflict: {msg}");
+        assert!(
+            msg.contains("both set"),
+            "error should mention conflict: {msg}"
+        );
     }
 
     #[test]
     fn resolve_agent_args_json_with_default_legacy_is_ok() {
         // JSON takes precedence when legacy is at its default ("acp").
-        let args = resolve_agent_args(
-            "custom-agent",
-            vec!["acp".into()],
-            Some(r#"["--verbose"]"#),
-        )
-        .unwrap();
+        let args = resolve_agent_args("custom-agent", vec!["acp".into()], Some(r#"["--verbose"]"#))
+            .unwrap();
         assert_eq!(args, vec!["--verbose"]);
     }
 
     #[test]
     fn resolve_agent_args_invalid_json_is_error() {
-        let result = resolve_agent_args(
-            "custom-agent",
-            vec!["acp".into()],
-            Some("not valid json"),
-        );
+        let result = resolve_agent_args("custom-agent", vec!["acp".into()], Some("not valid json"));
         assert!(result.is_err());
         let msg = format!("{}", result.unwrap_err());
-        assert!(msg.contains("not a valid JSON array"), "error should mention invalid JSON: {msg}");
+        assert!(
+            msg.contains("not a valid JSON array"),
+            "error should mention invalid JSON: {msg}"
+        );
     }
 
     #[test]
