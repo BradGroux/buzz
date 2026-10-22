@@ -516,15 +516,27 @@ impl ActionSink for RelayActionSink {
                 .ok_or_else(|| ActionSinkError::Database("relay is shutting down".into()))?;
             let tenant = resolve_workflow_tenant(&state, community_id).await?;
 
+            let author_pubkey = nostr::PublicKey::from_hex(&author_pubkey).map_err(|e| {
+                ActionSinkError::InvalidInput(format!("invalid author pubkey: {e}"))
+            })?;
+            let author_pubkey_bytes = author_pubkey.to_bytes().to_vec();
+            let author_pubkey_hex = author_pubkey.to_hex();
+
             let target_event_id = nostr::EventId::from_hex(&message_id).map_err(|e| {
                 ActionSinkError::InvalidInput(format!("invalid target event ID: {e}"))
             })?;
             let target_event_id_bytes = target_event_id.as_bytes().to_vec();
             let target_event = state
                 .db
-                .get_event_by_id(tenant.community(), &target_event_id_bytes)
+                .get_event_by_id_for_event_write(tenant.community(), &target_event_id_bytes)
                 .await
                 .map_err(|e| ActionSinkError::Database(e.to_string()))?
+                .filter(|target| {
+                    crate::handlers::req::event_visible_to_reader(
+                        &target.event,
+                        &author_pubkey_bytes,
+                    )
+                })
                 .ok_or_else(|| {
                     ActionSinkError::InvalidInput(format!(
                         "reaction target event not found: {message_id}"
@@ -549,7 +561,7 @@ impl ActionSink for RelayActionSink {
 
             let channel = state
                 .db
-                .get_channel(tenant.community(), channel_uuid)
+                .get_channel_for_event_write(tenant.community(), channel_uuid)
                 .await
                 .map_err(|e| match &e {
                     buzz_db::DbError::ChannelNotFound(_) | buzz_db::DbError::NotFound(_) => {
@@ -561,11 +573,6 @@ impl ActionSink for RelayActionSink {
                 return Err(ActionSinkError::ChannelArchived(channel_uuid.to_string()));
             }
 
-            let author_pubkey = nostr::PublicKey::from_hex(&author_pubkey).map_err(|e| {
-                ActionSinkError::InvalidInput(format!("invalid author pubkey: {e}"))
-            })?;
-            let author_pubkey_bytes = author_pubkey.to_bytes().to_vec();
-            let author_pubkey_hex = author_pubkey.to_hex();
             let is_member = state
                 .is_member_cached(tenant.community(), channel_uuid, &author_pubkey_bytes)
                 .await
@@ -595,7 +602,7 @@ impl ActionSink for RelayActionSink {
             let event = EventBuilder::new(Kind::from(KIND_REACTION as u16), &emoji)
                 .tags([
                     Tag::parse(["h", &channel_uuid.to_string()])
-                        .map_err(|e| ActionSinkError::Publish(e.to_string()))?,
+                        .map_err(|e| ActionSinkError::EventBuild(format!("h tag: {e}")))?,
                     Tag::parse(["e", &target_event_id.to_hex()])
                         .map_err(|e| ActionSinkError::EventBuild(format!("e tag: {e}")))?,
                     Tag::parse(["p", &target_author_hex])
@@ -1731,6 +1738,7 @@ mod postgres_tests {
             .create_community_with_owner(&host, &owner_hex, &nostr::Keys::generate())
             .await
             .expect("create community")
+            .outcome
         {
             CreateCommunityWithOwnerResult::Created(rec) => rec.id,
             other => panic!("expected fresh community, got {other:?}"),
@@ -1780,7 +1788,11 @@ mod postgres_tests {
             .expect("reaction persisted");
         assert_eq!(u32::from(stored.event.kind.as_u16()), KIND_REACTION);
         assert_eq!(stored.event.content, "👀");
-        assert!(stored.event.tags.iter().any(|tag| tag.as_slice() == ["h".to_string(), channel.id.to_string()]));
+        assert!(stored
+            .event
+            .tags
+            .iter()
+            .any(|tag| tag.as_slice() == ["h".to_string(), channel.id.to_string()]));
         assert_eq!(stored.event.pubkey, state.relay_keypair.public_key());
         assert!(stored
             .event
@@ -1833,7 +1845,7 @@ mod postgres_tests {
 
         assert!(state
             .db
-            .soft_delete_event(community, reaction_id.as_bytes())
+            .soft_delete_event_and_update_thread(community, reaction_id.as_bytes(), None, None)
             .await
             .expect("soft-delete reaction event"));
         assert!(state
