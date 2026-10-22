@@ -3542,8 +3542,13 @@ printf '%s\n' '{"jsonrpc":"2.0","id":0,"result":{"stopReason":"end_turn"}}'
                         "activity must extend the idle deadline"
                     );
                     if let Ok(event) = events.try_recv() {
-                        assert_eq!(event.kind, "acp_read");
-                        break;
+                        match event.kind.as_str() {
+                            "acp_read" => break,
+                            // The latency observer adds one semantic frame after
+                            // the first output; it is not the next pipe read.
+                            "turn_first_output" => {}
+                            other => panic!("unexpected observer frame: {other}"),
+                        }
                     }
                     assert!(
                         std::time::Instant::now() < watchdog,

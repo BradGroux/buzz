@@ -7599,6 +7599,7 @@ mod author_gate_tests {
             rest_client.clone(),
         );
         let event = relay::BuzzEvent {
+            received_at: std::time::Instant::now(),
             connection_generation: event_generation,
             channel_id,
             event: relay_signed_workflow_dispatch(relay_keys, workflow_owner, &agent),
@@ -7915,6 +7916,7 @@ mod author_gate_tests {
             rest_client.clone(),
         );
         let buzz_event = relay::BuzzEvent {
+            received_at: std::time::Instant::now(),
             connection_generation: 0,
             channel_id,
             event,
@@ -8024,6 +8026,7 @@ mod author_gate_tests {
             rest_client.clone(),
         );
         let buzz_event = relay::BuzzEvent {
+            received_at: std::time::Instant::now(),
             connection_generation: 1,
             channel_id,
             event,
@@ -8089,6 +8092,7 @@ mod author_gate_tests {
             rest_client.clone(),
         );
         let event = relay::BuzzEvent {
+            received_at: std::time::Instant::now(),
             connection_generation: 0,
             channel_id,
             event: relay_signed_workflow_dispatch(&relay_keys, &workflow_owner, &agent),
@@ -8149,6 +8153,7 @@ mod author_gate_tests {
                 rest_client.clone(),
             );
             let mut event = relay::BuzzEvent {
+                received_at: std::time::Instant::now(),
                 connection_generation: 0,
                 channel_id,
                 event: relay_signed_workflow_dispatch(&relay_keys, &workflow_owner, &agent),
@@ -8229,6 +8234,7 @@ mod author_gate_tests {
         assert_eq!(gate.relay_identity_for_test(), Some(old_relay_hex.as_str()));
 
         let new_event = relay::BuzzEvent {
+            received_at: std::time::Instant::now(),
             connection_generation: 2,
             channel_id,
             event: relay_signed_workflow_dispatch(&new_relay, &workflow_owner, &agent),
@@ -8267,6 +8273,7 @@ mod author_gate_tests {
         );
 
         let stale_old_event = relay::BuzzEvent {
+            received_at: std::time::Instant::now(),
             connection_generation: 2,
             channel_id,
             event: relay_signed_workflow_dispatch(&old_relay, &workflow_owner, &agent),
@@ -10738,6 +10745,7 @@ mod edit_native_steer_tests {
         };
         let ingress = NormalListenerIngress {
             buzz_event: relay::BuzzEvent {
+                received_at: std::time::Instant::now(),
                 connection_generation: 0,
                 channel_id,
                 event: edit,
@@ -10785,6 +10793,7 @@ mod edit_native_steer_tests {
         let ingress =
             |event: nostr::Event, edit: Option<queue::ResolvedEdit>| NormalListenerIngress {
                 buzz_event: relay::BuzzEvent {
+                    received_at: std::time::Instant::now(),
                     connection_generation: 0,
                     channel_id,
                     event,
@@ -10965,6 +10974,7 @@ mod edit_native_steer_tests {
             .expect("spawn holding ACP");
         let ingress = |event: nostr::Event| NormalListenerIngress {
             buzz_event: relay::BuzzEvent {
+                received_at: std::time::Instant::now(),
                 connection_generation: 0,
                 channel_id,
                 event,
