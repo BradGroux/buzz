@@ -6,3 +6,14 @@
 export function normalizeRelayUrl(relayUrl: string): string {
   return relayUrl.trim().replace(/\/+$/, "").toLowerCase();
 }
+
+/** Canonicalize relay endpoint identity while preserving path and query case. */
+export function canonicalizeRelayUrl(relayUrl: string): string {
+  const trimmed = relayUrl.trim();
+  try {
+    const url = new URL(trimmed);
+    return url.toString().replace(/\/+$/, "");
+  } catch {
+    return trimmed.replace(/\/+$/, "");
+  }
+}

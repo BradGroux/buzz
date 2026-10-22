@@ -21,7 +21,7 @@ import type {
   UpdateManagedAgentInput,
 } from "@/shared/api/types";
 import { normalizePubkey } from "@/shared/lib/pubkey";
-import { normalizeRelayUrl } from "@/shared/lib/normalizeRelayUrl";
+import { canonicalizeRelayUrl as normalizeRelayUrl } from "@/shared/lib/normalizeRelayUrl";
 
 export const WELCOME_GUIDE_AGENT_NAME = "Fizz";
 export const WELCOME_GUIDE_PERSONA_ID = "builtin:fizz";

@@ -309,10 +309,7 @@ test("Welcome ensured marker migrates the legacy raw relay URL key", () => {
     const legacyKey = `buzz-welcome-channel-ensured.v2:${encodeURIComponent(rawRelayUrl)}:pubkey-a`;
     window.localStorage.setItem(legacyKey, "true");
 
-    assert.equal(
-      hasEnsuredWelcomeChannel("pubkey-a", rawRelayUrl),
-      true,
-    );
+    assert.equal(hasEnsuredWelcomeChannel("pubkey-a", rawRelayUrl), true);
     assert.equal(
       hasEnsuredWelcomeChannel("pubkey-a", "wss://community-a.example"),
       true,
@@ -403,4 +400,25 @@ test("isWelcomeExperienceChannel matches legacy Welcome and starter welcome-ever
     false,
   );
   assert.equal(isWelcomeExperienceChannel(null), false);
+});
+
+test("Welcome relay markers preserve case-sensitive paths and queries", () => {
+  const { restore } = installWindowSessionStorage();
+  try {
+    markWelcomeChannelEnsured("pubkey-a", "WSS://EXAMPLE.COM/Team?key=AbC");
+    assert.equal(
+      hasEnsuredWelcomeChannel("pubkey-a", "wss://example.com/Team?key=AbC"),
+      true,
+    );
+    assert.equal(
+      hasEnsuredWelcomeChannel("pubkey-a", "wss://example.com/team?key=AbC"),
+      false,
+    );
+    assert.equal(
+      hasEnsuredWelcomeChannel("pubkey-a", "wss://example.com/Team?key=abc"),
+      false,
+    );
+  } finally {
+    restore();
+  }
 });

@@ -1,4 +1,4 @@
-import { normalizeRelayUrl as normalizeRelayUrlShared } from "@/shared/lib/normalizeRelayUrl";
+import { canonicalizeRelayUrl as normalizeRelayUrlShared } from "@/shared/lib/normalizeRelayUrl";
 import type {
   Channel,
   ChannelMember,
