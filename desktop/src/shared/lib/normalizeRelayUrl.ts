@@ -12,7 +12,9 @@ export function canonicalizeRelayUrl(relayUrl: string): string {
   const trimmed = relayUrl.trim();
   try {
     const url = new URL(trimmed);
-    return url.toString().replace(/\/+$/, "");
+    const suffix = `${url.search}${url.hash}`;
+    const endpoint = suffix ? url.href.slice(0, -suffix.length) : url.href;
+    return `${endpoint.replace(/\/+$/, "")}${suffix}`;
   } catch {
     return trimmed.replace(/\/+$/, "");
   }

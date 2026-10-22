@@ -418,6 +418,10 @@ test("Welcome relay markers preserve case-sensitive paths and queries", () => {
       hasEnsuredWelcomeChannel("pubkey-a", "wss://example.com/Team?key=abc"),
       false,
     );
+    assert.equal(
+      hasEnsuredWelcomeChannel("pubkey-a", "wss://example.com/Team?key=AbC/"),
+      false,
+    );
   } finally {
     restore();
   }
