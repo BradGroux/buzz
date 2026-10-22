@@ -198,8 +198,8 @@ pub(super) fn fold_edit_content(
         // Authorization: signer must be the original author or the
         // author's verified agent owner.
         let signer = edit.pubkey.to_hex();
-        let authorized = signer == original_author
-            || owner_pubkeys.get(&original_author) == Some(&signer);
+        let authorized =
+            signer == original_author || owner_pubkeys.get(&original_author) == Some(&signer);
         if !authorized {
             continue;
         }
@@ -400,7 +400,12 @@ mod tests {
     fn fold_edit_content_applies_author_edit() {
         let author = Keys::generate();
         let original = signed_event(&author, 45001, Vec::new());
-        let edit = edit_event(&author, "edited body", &original.id.to_hex(), nostr::Timestamp::now());
+        let edit = edit_event(
+            &author,
+            "edited body",
+            &original.id.to_hex(),
+            nostr::Timestamp::now(),
+        );
         let owners = std::collections::HashMap::new();
         let result = fold_edit_content(&original, std::slice::from_ref(&edit), &owners);
         assert_eq!(result.as_deref(), Some("edited body"));
@@ -411,7 +416,12 @@ mod tests {
         let author = Keys::generate();
         let owner = Keys::generate();
         let original = signed_event(&author, 45001, Vec::new());
-        let edit = edit_event(&owner, "owner-edited", &original.id.to_hex(), nostr::Timestamp::now());
+        let edit = edit_event(
+            &owner,
+            "owner-edited",
+            &original.id.to_hex(),
+            nostr::Timestamp::now(),
+        );
         let owners = std::collections::HashMap::from([(
             author.public_key().to_hex(),
             owner.public_key().to_hex(),
@@ -425,7 +435,12 @@ mod tests {
         let author = Keys::generate();
         let attacker = Keys::generate();
         let original = signed_event(&author, 45001, Vec::new());
-        let edit = edit_event(&attacker, "hacked", &original.id.to_hex(), nostr::Timestamp::now());
+        let edit = edit_event(
+            &attacker,
+            "hacked",
+            &original.id.to_hex(),
+            nostr::Timestamp::now(),
+        );
         let owners = std::collections::HashMap::new();
         let result = fold_edit_content(&original, std::slice::from_ref(&edit), &owners);
         assert!(result.is_none(), "unauthorized edit must not apply");
@@ -435,8 +450,18 @@ mod tests {
     fn fold_edit_content_latest_edit_wins() {
         let author = Keys::generate();
         let original = signed_event(&author, 45001, Vec::new());
-        let older = edit_event(&author, "first", &original.id.to_hex(), nostr::Timestamp::from_secs(100));
-        let newer = edit_event(&author, "second", &original.id.to_hex(), nostr::Timestamp::from_secs(200));
+        let older = edit_event(
+            &author,
+            "first",
+            &original.id.to_hex(),
+            nostr::Timestamp::from_secs(100),
+        );
+        let newer = edit_event(
+            &author,
+            "second",
+            &original.id.to_hex(),
+            nostr::Timestamp::from_secs(200),
+        );
         let owners = std::collections::HashMap::new();
         let edits = [older, newer];
         let result = fold_edit_content(&original, &edits, &owners);
@@ -455,10 +480,18 @@ mod tests {
             .custom_created_at(nostr::Timestamp::from_secs(1))
             .sign_with_keys(&author)
             .expect("event signs");
-        let edit = edit_event(&author, "wrong target", &other.id.to_hex(), nostr::Timestamp::now());
+        let edit = edit_event(
+            &author,
+            "wrong target",
+            &other.id.to_hex(),
+            nostr::Timestamp::now(),
+        );
         let owners = std::collections::HashMap::new();
         let result = fold_edit_content(&original, std::slice::from_ref(&edit), &owners);
-        assert!(result.is_none(), "edit targeting a different event must not apply");
+        assert!(
+            result.is_none(),
+            "edit targeting a different event must not apply"
+        );
     }
 
     #[test]
@@ -469,7 +502,12 @@ mod tests {
         let owner = Keys::generate();
         let agent = Keys::generate();
         let original = signed_event(&owner, 45001, Vec::new());
-        let edit = edit_event(&agent, "agent-edited", &original.id.to_hex(), nostr::Timestamp::now());
+        let edit = edit_event(
+            &agent,
+            "agent-edited",
+            &original.id.to_hex(),
+            nostr::Timestamp::now(),
+        );
         let owners = std::collections::HashMap::from([(
             agent.public_key().to_hex(),
             owner.public_key().to_hex(),
