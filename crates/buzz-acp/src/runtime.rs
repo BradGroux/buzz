@@ -22,6 +22,8 @@ pub(crate) struct AgentRuntime {
 
 impl AgentRuntime {
     pub(crate) fn prepare(mut config: Config) -> Result<Self> {
+        // Validate process-wide MCP input before either entry point connects.
+        build_mcp_servers(&config)?;
         let git_environment = git::GitEnvironment::for_config(&mut config)?;
         Ok(Self {
             config,

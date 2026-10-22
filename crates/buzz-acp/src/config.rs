@@ -272,15 +272,10 @@ pub struct CliArgs {
     #[arg(long, env = "BUZZ_ACP_MCP_COMMAND", default_value = "")]
     pub mcp_command: String,
 
-    /// Additional MCP server commands to pass to the agent session alongside
-    /// the primary MCP server. Entries are comma-separated; each entry is
-    /// shell-split (shlex) into a command and its args, so quoted paths and
-    /// arguments with spaces are preserved. Server names are derived from the
-    /// executable stem and disambiguated with a numeric suffix if duplicates
-    /// occur (e.g. two `npx` wrappers become `npx` and `npx-2`). Entries with
-    /// malformed quoting are skipped with a warning. Example:
-    /// `npx -y mcp-remote https://mcp.tavily.com/mcp/?tavilyApiKey=...,other-server`
-    #[arg(long, env = "BUZZ_ACP_EXTRA_MCP_COMMANDS", value_delimiter = ',')]
+    /// Newline-separated additional MCP commands, shell-split per line.
+    /// Prefix a command with `name=` to keep its server identity stable.
+    /// Malformed quoting fails startup without echoing command contents.
+    #[arg(long, env = "BUZZ_ACP_EXTRA_MCP_COMMANDS", value_delimiter = '\n')]
     pub extra_mcp_commands: Vec<String>,
 
     /// Idle timeout: max seconds of silence before killing a turn.
@@ -3257,6 +3252,21 @@ channels = "ALL"
             violations.is_empty(),
             "Found secret-bearing env args without hide_env_values=true. \
              Add `hide_env_values = true` to each: {violations:?}"
+        );
+    }
+    #[test]
+    fn extra_mcp_cli_splits_lines_without_splitting_commas() {
+        let args = CliArgs::try_parse_from([
+            "buzz-acp",
+            "--private-key",
+            TEST_PRIVATE_KEY,
+            "--extra-mcp-commands",
+            "memory=npx server --filter 'a,b'\nsearch=npx search",
+        ])
+        .expect("extra MCP command list");
+        assert_eq!(
+            args.extra_mcp_commands,
+            ["memory=npx server --filter 'a,b'", "search=npx search"]
         );
     }
 }

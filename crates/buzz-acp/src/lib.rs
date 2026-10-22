@@ -6451,90 +6451,114 @@ async fn run_models(args: ModelsArgs) -> Result<()> {
 }
 
 fn build_mcp_servers(config: &Config) -> Result<Vec<McpServer>, ConfigError> {
-    if config.mcp_command.is_empty() {
-        return Ok(vec![]);
+    let mut servers = Vec::new();
+    if !config.mcp_command.is_empty() {
+        servers.push(McpServer {
+            name: std::path::Path::new(&config.mcp_command)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("mcp")
+                .to_string(),
+            command: config.mcp_command.clone(),
+            args: vec![],
+            env: {
+                let mut env = vec![
+                    EnvVar {
+                        name: "BUZZ_OUTPUT_FORMAT".into(),
+                        value: config::agent_output_format(&config.persona_env_vars),
+                    },
+                    EnvVar {
+                        name: "BUZZ_RELAY_URL".into(),
+                        value: config.relay_url.clone(),
+                    },
+                    EnvVar {
+                        name: "BUZZ_PRIVATE_KEY".into(),
+                        // bech32 encoding of a valid secret key is infallible.
+                        // Panic here is correct: injecting a bogus secret would cause
+                        // delayed, hard-to-diagnose agent failures downstream.
+                        value: config
+                            .keys
+                            .secret_key()
+                            .to_bech32()
+                            .expect("secret key bech32 encoding should never fail"),
+                    },
+                ];
+                // Forward BUZZ_AUTH_TAG (NIP-OA owner attestation credential)
+                // so the MCP server can attach it to every signed event.
+                if let Ok(auth_tag) = std::env::var("BUZZ_AUTH_TAG") {
+                    if !auth_tag.is_empty() {
+                        env.push(EnvVar {
+                            name: "BUZZ_AUTH_TAG".into(),
+                            value: auth_tag,
+                        });
+                    }
+                }
+                // Preserve the display-name contract for tools. Git authorship is
+                // already normalized by the harness bootstrap.
+                if let Ok(display_name) = std::env::var("BUZZ_ACP_DISPLAY_NAME") {
+                    if !display_name.is_empty() {
+                        env.push(EnvVar {
+                            name: "BUZZ_ACP_DISPLAY_NAME".into(),
+                            value: display_name,
+                        });
+                    }
+                }
+                for (name, value) in &config.persona_env_vars {
+                    if git::is_managed_env(name) {
+                        env.retain(|entry| entry.name != *name);
+                        env.push(EnvVar {
+                            name: name.clone(),
+                            value: value.clone(),
+                        });
+                    }
+                }
+                env
+            },
+            trusted: true,
+        });
     }
-    let mut servers = vec![McpServer {
-        name: std::path::Path::new(&config.mcp_command)
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("mcp")
-            .to_string(),
-        command: config.mcp_command.clone(),
-        args: vec![],
-        env: {
-            let mut env = vec![
-                EnvVar {
-                    name: "BUZZ_OUTPUT_FORMAT".into(),
-                    value: config::agent_output_format(&config.persona_env_vars),
-                },
-                EnvVar {
-                    name: "BUZZ_RELAY_URL".into(),
-                    value: config.relay_url.clone(),
-                },
-                EnvVar {
-                    name: "BUZZ_PRIVATE_KEY".into(),
-                    // bech32 encoding of a valid secret key is infallible.
-                    // Panic here is correct: injecting a bogus secret would cause
-                    // delayed, hard-to-diagnose agent failures downstream.
-                    value: config
-                        .keys
-                        .secret_key()
-                        .to_bech32()
-                        .expect("secret key bech32 encoding should never fail"),
-                },
-            ];
-            // Forward BUZZ_AUTH_TAG (NIP-OA owner attestation credential)
-            // so the MCP server can attach it to every signed event.
-            if let Ok(auth_tag) = std::env::var("BUZZ_AUTH_TAG") {
-                if !auth_tag.is_empty() {
-                    env.push(EnvVar {
-                        name: "BUZZ_AUTH_TAG".into(),
-                        value: auth_tag,
-                    });
-                }
-            }
-            // Preserve the display-name contract for tools. Git authorship is
-            // already normalized by the harness bootstrap.
-            if let Ok(display_name) = std::env::var("BUZZ_ACP_DISPLAY_NAME") {
-                if !display_name.is_empty() {
-                    env.push(EnvVar {
-                        name: "BUZZ_ACP_DISPLAY_NAME".into(),
-                        value: display_name,
-                    });
-                }
-            }
-            for (name, value) in &config.persona_env_vars {
-                if git::is_managed_env(name) {
-                    env.retain(|entry| entry.name != *name);
-                    env.push(EnvVar {
-                        name: name.clone(),
-                        value: value.clone(),
-                    });
-                }
-            }
-            env
-        },
-        trusted: true,
-    }];
 
     // Append extra MCP servers from BUZZ_ACP_EXTRA_MCP_COMMANDS.
     // Each entry is shell-split into command + args using shlex, so quoted
     // paths and arguments with spaces are preserved. Malformed entries cause
     // startup to fail closed — the error identifies the entry index without
     // echoing the command, which may contain an embedded API key.
-    // Extra servers do not receive Buzz relay credentials or auth tags —
-    // they are third-party tools, not Buzz-native MCP servers.
+    // Extra descriptors contain no explicit Buzz credential entries.
+    // Inherited credentials are filtered by buzz-agent's spawn boundary;
+    // third-party ACP adapters may pass their parent environment through.
     let mut seen_names: std::collections::HashSet<String> =
-        std::collections::HashSet::from_iter([servers[0].name.clone()]);
+        servers.iter().map(|server| server.name.clone()).collect();
     for (idx, extra) in config.extra_mcp_commands.iter().enumerate() {
         let trimmed = extra.trim();
         if trimmed.is_empty() {
             continue;
         }
-        let parts = match shlex::split(trimmed) {
+        let (explicit_name, command_text) = match trimmed.split_once('=') {
+            Some((name, command))
+                if !name.is_empty()
+                    && name
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-') =>
+            {
+                if name.len() > 128 {
+                    return Err(ConfigError::ConfigFile(format!(
+                        "BUZZ_ACP_EXTRA_MCP_COMMANDS entry {} has a name longer than 128 bytes",
+                        idx + 1
+                    )));
+                }
+                (Some(name), command)
+            }
+            _ => (None, trimmed),
+        };
+        let parts = match shlex::split(command_text) {
             Some(p) if !p.is_empty() => p,
-            Some(_) => continue,
+            Some(_) if explicit_name.is_none() => continue,
+            Some(_) => {
+                return Err(ConfigError::ConfigFile(format!(
+                    "BUZZ_ACP_EXTRA_MCP_COMMANDS entry {} has no command",
+                    idx + 1
+                )))
+            }
             None => {
                 return Err(ConfigError::ConfigFile(format!(
                     "BUZZ_ACP_EXTRA_MCP_COMMANDS entry {} has malformed shell quoting; \
@@ -6552,12 +6576,25 @@ fn build_mcp_servers(config: &Config) -> Result<Vec<McpServer>, ConfigError> {
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap_or("extra-mcp");
-        let base_name = sanitize_mcp_name(raw_stem);
+        let base_name = explicit_name
+            .map(str::to_owned)
+            .unwrap_or_else(|| sanitize_mcp_name(raw_stem));
         let name = if seen_names.contains(&base_name) {
+            if explicit_name.is_some() {
+                return Err(ConfigError::ConfigFile(format!(
+                    "BUZZ_ACP_EXTRA_MCP_COMMANDS entry {} has a duplicate explicit server name",
+                    idx + 1
+                )));
+            }
             // Append a numeric suffix until we find a unique name.
             let mut i = 2;
             loop {
-                let candidate = format!("{base_name}-{i}");
+                let suffix = format!("-{i}");
+                let candidate = format!(
+                    "{}{}",
+                    &base_name[..base_name.len().min(128 - suffix.len())],
+                    suffix
+                );
                 if !seen_names.contains(&candidate) {
                     break candidate;
                 }
@@ -6586,18 +6623,12 @@ fn build_mcp_servers(config: &Config) -> Result<Vec<McpServer>, ConfigError> {
 fn sanitize_mcp_name(raw: &str) -> String {
     let sanitized: String = raw
         .chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() {
-                c
-            } else {
-                '-'
-            }
-        })
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
         .collect::<String>()
         .trim_matches('-')
         .to_string();
     let truncated = if sanitized.len() > 128 {
-        sanitized[..=128].to_string()
+        sanitized[..128].to_string()
     } else {
         sanitized
     };
@@ -10335,7 +10366,7 @@ mod build_mcp_servers_tests {
         let mut config = test_config();
         let git = install_git_with_env(&config, &vars).unwrap();
         config.persona_env_vars.extend(git.env.iter().cloned());
-        let servers = build_mcp_servers(&config);
+        let servers = build_mcp_servers(&config).unwrap();
         let env = &servers[0].env;
         let value_of = |name: &str| {
             env.iter()
@@ -10404,7 +10435,7 @@ mod build_mcp_servers_tests {
             .map(|(_, value)| value.as_str())
             .collect();
         assert_eq!(modes, ["user"]);
-        let servers = build_mcp_servers(&config);
+        let servers = build_mcp_servers(&config).unwrap();
         let forwarded: Vec<_> = servers[0]
             .env
             .iter()
@@ -10420,7 +10451,7 @@ mod build_mcp_servers_tests {
         let mut config = test_config();
         let git = install_git_with_env(&config, &[]).unwrap();
         config.persona_env_vars.extend(git.env.iter().cloned());
-        let servers = build_mcp_servers(&config);
+        let servers = build_mcp_servers(&config).unwrap();
         let env = &servers[0].env;
         for (name, value) in &git.env {
             let entries: Vec<_> = env.iter().filter(|entry| entry.name == *name).collect();
@@ -10488,7 +10519,7 @@ mod build_mcp_servers_tests {
                 .iter()
                 .map(|value| ("BUZZ_OUTPUT_FORMAT".into(), (*value).into()))
                 .collect();
-            let servers = build_mcp_servers(&config);
+            let servers = build_mcp_servers(&config).unwrap();
             match &inherited {
                 Some(value) => std::env::set_var("BUZZ_OUTPUT_FORMAT", value),
                 None => std::env::remove_var("BUZZ_OUTPUT_FORMAT"),
@@ -10636,6 +10667,42 @@ mod build_mcp_servers_tests {
     }
 
     #[test]
+    fn malformed_extra_mcp_fails_runtime_preparation_without_echoing_command() {
+        let mut config = test_config();
+        config.extra_mcp_commands = vec!["memory=npx --token 'private-token".into()];
+        let error = runtime::AgentRuntime::prepare(config)
+            .err()
+            .expect("invalid MCP command");
+        assert!(error.to_string().contains("entry 1"));
+        assert!(!error.to_string().contains("private-token"));
+    }
+
+    #[test]
+    fn extra_mcp_commands_preserve_explicit_names_and_shell_arguments() {
+        let mut config = test_config();
+        config.extra_mcp_commands = vec![
+            "memory=npx -y memory-mcp --filter 'a,b' --label ''".into(),
+            "search=npx -y search-mcp".into(),
+        ];
+        let servers = build_mcp_servers(&config).unwrap();
+        assert_eq!(servers[1].name, "memory");
+        assert_eq!(servers[1].command, "npx");
+        assert_eq!(
+            servers[1].args,
+            ["-y", "memory-mcp", "--filter", "a,b", "--label", ""]
+        );
+        config.extra_mcp_commands.reverse();
+        let reordered = build_mcp_servers(&config).unwrap();
+        assert_eq!(reordered[1].name, "search");
+        assert_eq!(reordered[2].name, "memory");
+        config.extra_mcp_commands.push("memory=npx other".into());
+        assert!(build_mcp_servers(&config).is_err());
+        config.extra_mcp_commands = vec!["memory=".into()];
+        assert!(build_mcp_servers(&config).is_err());
+        assert_eq!(sanitize_mcp_name(&"a".repeat(129)).len(), 128);
+    }
+
+    #[test]
     fn extra_mcp_commands_append_additional_servers() {
         let mut config = test_config();
         config.extra_mcp_commands =
@@ -10702,15 +10769,15 @@ mod build_mcp_servers_tests {
     }
 
     #[test]
-    fn extra_mcp_commands_with_empty_mcp_command_returns_no_servers() {
+    fn extra_mcp_commands_work_without_primary_server() {
         let mut config = test_config();
-        config.mcp_command = "".into();
-        config.extra_mcp_commands = vec!["some-extra-server".into()];
+        config.mcp_command.clear();
+        config.extra_mcp_commands = vec!["memory=npx -y memory-mcp".into()];
         let servers = build_mcp_servers(&config).unwrap();
-        assert!(
-            servers.is_empty(),
-            "empty primary mcp_command should still short-circuit even with extras"
-        );
+        assert_eq!(servers.len(), 1);
+        assert_eq!(servers[0].name, "memory");
+        assert!(!servers[0].trusted);
+        assert!(servers[0].env.is_empty());
     }
 
     #[test]
