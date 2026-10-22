@@ -243,6 +243,7 @@ fn resolve_effective_agent_env_with_def(
 
     // Keep layers separate until runtime aliases are mirrored.
     let definition_env = harness_def
+        .as_ref()
         .map(|def| merged_user_env(&BTreeMap::new(), &def.env))
         .unwrap_or_default();
     let global_env = merged_user_env(&BTreeMap::new(), &global.env_vars);
