@@ -241,44 +241,37 @@ fn resolve_shell_falls_through_to_passwd_not_the_default() {
     );
 }
 
-/// Concurrent callers of the passwd lookup must agree with each other and
-/// with a serial read (`#7589`).
-///
-/// The old `getpwuid` implementation returned libc-owned static storage that
-/// any thread's passwd-database call could rewrite mid-copy, so two reads of
-/// the same uid could disagree — the observed CI failure (run 34631406730)
-/// was exactly this shape: `passwd_shell()` and `resolve_shell(None)`
-/// disagreeing (`"/bin/bash"` vs `"/back"`) in a concurrently running test
-/// binary. With `getpwuid_r` every call owns its storage, so this guard
-/// checks agreement; under the old code it exercises the interleaving that
-/// flaked CI, at higher intensity. macOS `getpwuid` returns thread-specific
-/// storage, so a green pass here does not clear the Linux defect — Linux
-/// runtime validation is still needed.
+/// Exercise overlapping reads through both the raw lookup and shell resolver.
+/// This is supplemental runtime coverage, not a deterministic race detector.
+/// `shell.rs`'s production `forbid(unsafe_code)` guard rejects restoration of
+/// the old direct `getpwuid` implementation even on macOS, where it can pass
+/// concurrent runtime checks. Linux runtime validation remains necessary.
 #[test]
 fn passwd_shell_concurrent_reads_agree() {
     let reference = crate::shell::passwd_shell();
-    // A valid minimal Unix host can have no passwd entry or use /bin/sh.
-    // Concurrent reads must still agree, including the missing-entry case.
-
+    let resolved = reference
+        .as_deref()
+        .filter(|shell| is_executable_file(std::path::Path::new(shell)))
+        .unwrap_or(FALLBACK_SHELL)
+        .to_owned();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
     let readers: Vec<_> = (0..8)
-        .map(|_| std::thread::spawn(crate::shell::passwd_shell))
+        .map(|_| {
+            let barrier = std::sync::Arc::clone(&barrier);
+            let reference = reference.clone();
+            let resolved = resolved.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                for _ in 0..32 {
+                    assert_eq!(crate::shell::passwd_shell(), reference);
+                    assert_eq!(resolve_shell(None), resolved);
+                }
+            })
+        })
         .collect();
     for reader in readers {
-        let read = reader.join().expect("passwd reader thread");
-        assert_eq!(
-            read.as_deref(),
-            reference.as_deref(),
-            "concurrent passwd reads disagree with the serial reference"
-        );
+        reader.join().expect("passwd reader thread");
     }
-    // The CI failure compared a direct read against `resolve_shell`'s second
-    // lookup; keep that arm so the guard covers the production resolution
-    // path, not just the raw lookup.
-    assert_eq!(
-        resolve_shell(None),
-        reference.unwrap_or_else(|| FALLBACK_SHELL.to_string()),
-        "resolve_shell's passwd lookup disagrees with the serial reference"
-    );
 }
 
 /// `access(X_OK)` returns 0 for a directory, so a `$SHELL` pointing at one

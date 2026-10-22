@@ -21,6 +21,9 @@
 //! on many systems. A directory or a non-executable file falls through to the
 //! next candidate instead of becoming an unspawnable child.
 
+// Reject regressions to direct libc passwd pointers at the production boundary.
+#![forbid(unsafe_code)]
+
 use std::path::Path;
 
 /// Last-resort shell. POSIX guarantees `/bin/sh`; if this is not executable
@@ -52,18 +55,11 @@ pub fn is_executable_file(path: &Path) -> bool {
     meta.is_file() && can_execute(path)
 }
 
-/// `access(path, X_OK)`: does the *effective* user have execute permission,
+/// `access(path, X_OK)`: do the real user/group IDs have execute permission,
 /// accounting for the applicable permission class and ACLs?
 #[cfg(unix)]
 fn can_execute(path: &Path) -> bool {
-    use std::os::unix::ffi::OsStrExt;
-
-    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
-        return false; // interior NUL: not a path we can ask about
-    };
-    // SAFETY: `c_path` is a valid NUL-terminated C string for the duration of
-    // the call, and `access` only reads it.
-    unsafe { libc::access(c_path.as_ptr(), libc::X_OK) == 0 }
+    nix::unistd::access(path, nix::unistd::AccessFlags::X_OK).is_ok()
 }
 
 /// Resolves the shell to spawn: `$SHELL`, then the passwd entry, then
@@ -100,7 +96,8 @@ fn validated(candidate: &str) -> bool {
 /// can have no `$SHELL` at all: without it we would hand a zsh user `/bin/sh`
 /// and call it their shell of choice.
 ///
-/// Uses the reentrant `getpwuid_r` with caller-owned storage, not `getpwuid`.
+/// Uses nix's safe `User::from_uid`, backed by reentrant `getpwuid_r` with
+/// caller-owned storage, rather than directly accessing libc pointers.
 /// `getpwuid` hands back a pointer to libc-owned **static** storage that any
 /// thread's passwd-database call can rewrite mid-copy: Linux documents it as
 /// MT-Unsafe `race:pwuid`, and glibc drops its internal NSS lock before
@@ -112,68 +109,8 @@ fn validated(candidate: &str) -> bool {
 /// only reentrancy can.
 #[cfg(unix)]
 pub(crate) fn passwd_shell() -> Option<String> {
-    // Initial buffer size per POSIX guidance: sysconf(_SC_GETPW_R_SIZE_MAX),
-    // or a working guess on platforms that report no limit (Linux may return
-    // -1). The ERANGE retry below handles undersizing either way.
-    let initial_size = match unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) } {
-        n if n > 0 => n as usize,
-        _ => 4096,
-    };
-    // Upper bound for the retry loop. A passwd entry that cannot fit in this
-    // is pathological (entries are a few hundred bytes); the bound guarantees
-    // termination and bounds the allocation a broken backend can force.
-    const MAX_BUF: usize = 1024 * 1024;
-    let mut buf_size = initial_size.min(MAX_BUF);
-
-    loop {
-        let mut buf = vec![0u8; buf_size];
-        let mut entry: libc::passwd = unsafe { std::mem::zeroed() };
-        let mut result: *mut libc::passwd = std::ptr::null_mut();
-        // SAFETY: `entry` and `buf` are caller-owned storage that outlive the
-        // call. `getpwuid_r` writes the string fields of the entry into
-        // `buf` (at most `buf.len()` bytes), copies the fixed-size fields
-        // into `entry`, and stores either a pointer to `entry` or null into
-        // `result`. Unlike `getpwuid`, no libc-owned storage escapes this
-        // call, which is what makes it MT-Safe under concurrent
-        // passwd-database calls from any thread.
-        let status = unsafe {
-            libc::getpwuid_r(
-                libc::getuid(),
-                &mut entry,
-                buf.as_mut_ptr().cast(),
-                buf.len(),
-                &mut result,
-            )
-        };
-        if status == libc::ERANGE {
-            // The entry did not fit in the buffer; grow and retry.
-            if buf_size >= MAX_BUF {
-                return None;
-            }
-            buf_size = (buf_size * 2).min(MAX_BUF);
-            continue;
-        }
-        if status != 0 {
-            return None; // lookup error: fall through to the next candidate
-        }
-        if result.is_null() {
-            return None; // this uid has no passwd entry
-        }
-        // On success `result` points at our caller-owned `entry` (the
-        // getpwuid_r contract), so reading `pw_shell` touches our stack
-        // struct, not libc-owned statics. The string it names lives in
-        // `buf`, still alive here, and is NUL-terminated by contract.
-        let pw_shell = entry.pw_shell;
-        if pw_shell.is_null() {
-            return None;
-        }
-        // SAFETY: `pw_shell` points to a NUL-terminated string inside `buf`.
-        let shell = unsafe { std::ffi::CStr::from_ptr(pw_shell) }
-            .to_str()
-            .ok()?
-            .to_owned();
-        return Some(shell);
-    }
+    let user = nix::unistd::User::from_uid(nix::unistd::Uid::current()).ok()??;
+    user.shell.into_os_string().into_string().ok()
 }
 
 /// The login-shell `argv[0]` convention: the shell's basename prefixed with
