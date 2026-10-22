@@ -2,7 +2,7 @@
 fn runtime_catalog_projects_capability_facts_for_ipc() {
     let runtime = super::known_acp_runtime_exact("buzz-agent")
         .expect("buzz-agent runtime metadata should exist");
-    let entry = super::discover_acp_runtime_phase1(runtime).entry;
+    let entry = super::discover_acp_runtime_phase1(runtime, false).entry;
 
     assert_eq!(
         entry.capabilities.supports_acp_native_config,

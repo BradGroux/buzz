@@ -139,6 +139,7 @@ test("renders owner-only readiness from catalog, lifecycle, and observer evidenc
       {
         pubkey: AGENT_PUBKEY,
         name: "TARS",
+        credentialPersistence: "keyring_verified",
         status: "running",
         channelNames: ["agents"],
       },

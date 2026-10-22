@@ -36,6 +36,7 @@ export type RawAcpRuntimeCatalogEntry = {
    */
   definition_env?: Record<string, string>;
   max_parallelism?: number;
+  effort_canonical_values?: string[] | null;
   supports_acp_native_config?: boolean;
   supports_acp_model_switching?: boolean;
   mcp_hooks?: boolean;
@@ -76,5 +77,6 @@ export function fromRawAcpRuntimeCatalogEntry(
     supportsAcpNativeConfig: entry.supports_acp_native_config ?? null,
     supportsAcpModelSwitching: entry.supports_acp_model_switching ?? null,
     mcpHooks: entry.mcp_hooks ?? null,
+    effortCanonicalValues: entry.effort_canonical_values ?? null,
   };
 }

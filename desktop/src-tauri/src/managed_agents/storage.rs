@@ -8,10 +8,10 @@ use std::{
 use tauri::{AppHandle, Manager};
 
 use crate::app_state::keyring_service;
+use crate::managed_agents::types::CredentialPersistence;
 use crate::managed_agents::{
     ManagedAgentRecord, ManagedAgentRuntimeKey, ManagedAgentRuntimeReceipt,
 };
-use crate::managed_agents::types::CredentialPersistence;
 use crate::secret_store::{KeyringProbe, SecretStore};
 
 /// Keyring key name for an agent's nsec, namespaced from the human identity

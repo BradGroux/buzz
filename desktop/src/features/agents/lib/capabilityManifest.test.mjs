@@ -738,7 +738,10 @@ test("credential persistence readiness check reflects inline_fallback as ready w
   });
   const check = result.readiness.find((c) => c.id === "credential_persistence");
   assert.equal(check?.status, "ready");
-  assert.equal(check?.detail, "Key stored inline (keyring unreachable at last save)");
+  assert.equal(
+    check?.detail,
+    "Key stored inline (keyring unreachable at last save)",
+  );
 });
 
 test("credential persistence readiness check reflects missing as attention", () => {
@@ -756,7 +759,10 @@ test("credential persistence readiness check reflects unavailable as unknown", (
   });
   const check = result.readiness.find((c) => c.id === "credential_persistence");
   assert.equal(check?.status, "unknown");
-  assert.equal(check?.detail, "Keyring unavailable — cannot determine persistence");
+  assert.equal(
+    check?.detail,
+    "Keyring unavailable — cannot determine persistence",
+  );
 });
 
 test("credential persistence readiness check defaults to unknown when backend does not report it", () => {
@@ -770,7 +776,9 @@ test("credential persistence readiness check defaults to unknown when backend do
 test("credential persistence check is positioned after authentication in the readiness array", () => {
   const result = manifest();
   const authIdx = result.readiness.findIndex((c) => c.id === "authentication");
-  const credIdx = result.readiness.findIndex((c) => c.id === "credential_persistence");
+  const credIdx = result.readiness.findIndex(
+    (c) => c.id === "credential_persistence",
+  );
   assert.equal(credIdx, authIdx + 1);
 });
 

@@ -40,6 +40,8 @@ pub struct AcpRuntimeCatalogEntry {
     pub provider_env_var: Option<String>,
     /// Environment variable used to apply thinking effort, when supported.
     pub thinking_env_var: Option<String>,
+    /// Runtime-provided canonical effort choices, preserved from the shared catalog.
+    pub effort_canonical_values: Option<Vec<String>>,
     pub max_tokens_env_var: Option<String>,
     pub context_limit_env_var: Option<String>,
     pub max_rounds_env_var: Option<String>,
@@ -76,4 +78,57 @@ pub struct AcpRuntimeCatalogEntry {
     pub max_parallelism: Option<u32>,
     #[serde(flatten)]
     pub capabilities: AcpRuntimeCapabilityFacts,
+}
+
+impl AcpRuntimeCatalogEntry {
+    /// Project a saved custom harness into its catalog row without claiming static capabilities.
+    pub(crate) fn from_custom_harness(
+        definition: crate::managed_agents::custom_harnesses::HarnessDefinition,
+    ) -> Self {
+        // Resolve availability for the returned catalog entry.
+        let (availability, command_opt, binary_path) =
+            match crate::managed_agents::find_command(&definition.command) {
+                Some(path) => (
+                    AcpAvailabilityStatus::Available,
+                    Some(definition.command.clone()),
+                    Some(path.display().to_string()),
+                ),
+                None => (AcpAvailabilityStatus::NotInstalled, None, None),
+            };
+
+        let default_args = crate::managed_agents::normalize_agent_args(
+            &definition.command,
+            definition.args.clone(),
+        );
+
+        Self {
+            id: definition.id,
+            label: definition.label,
+            avatar_url: String::new(),
+            availability,
+            command: command_opt,
+            binary_path,
+            default_args,
+            mcp_command: None,
+            model_env_var: None,
+            provider_env_var: None,
+            thinking_env_var: None,
+            effort_canonical_values: None,
+            max_tokens_env_var: None,
+            context_limit_env_var: None,
+            max_rounds_env_var: None,
+            install_hint: definition.install_hint,
+            install_instructions_url: definition.install_instructions_url,
+            can_auto_install: false,
+            requires_external_cli: false,
+            underlying_cli_path: None,
+            node_required: false,
+            auth_status: AuthStatus::NotApplicable,
+            login_hint: None,
+            source: HarnessSource::Custom,
+            definition_env: definition.env,
+            max_parallelism: crate::managed_agents::harness_max_parallelism(&definition.command),
+            capabilities: Default::default(),
+        }
+    }
 }
