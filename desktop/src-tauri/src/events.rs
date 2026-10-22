@@ -764,7 +764,9 @@ pub fn build_dm_open(pubkeys: &[String]) -> Result<EventBuilder, String> {
         check_pubkey(pk)?;
         tags.push(tag(vec!["p", &pk.to_ascii_lowercase()])?);
     }
-    Ok(EventBuilder::new(Kind::Custom(41010), "").tags(tags).allow_self_tagging())
+    Ok(EventBuilder::new(Kind::Custom(41010), "")
+        .tags(tags)
+        .allow_self_tagging())
 }
 
 /// Kind 41012 — hide a DM channel from the user's listing.

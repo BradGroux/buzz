@@ -807,7 +807,9 @@ pub fn build_add_member(
     if let Some(r) = role {
         tags.push(tag(&["role", r.as_str()])?);
     }
-    Ok(EventBuilder::new(Kind::Custom(9000), "").tags(tags).allow_self_tagging())
+    Ok(EventBuilder::new(Kind::Custom(9000), "")
+        .tags(tags)
+        .allow_self_tagging())
 }
 
 /// Build a NIP-29 remove-member event (kind 9001).
@@ -824,7 +826,9 @@ pub fn build_remove_member(
         tag(&["h", &channel_id.to_string()])?,
         tag(&["p", &target_pubkey.to_ascii_lowercase()])?,
     ];
-    Ok(EventBuilder::new(Kind::Custom(9001), "").tags(tags).allow_self_tagging())
+    Ok(EventBuilder::new(Kind::Custom(9001), "")
+        .tags(tags)
+        .allow_self_tagging())
 }
 
 /// Build a NIP-29 leave-request event (kind 9022).
@@ -1930,7 +1934,9 @@ pub fn build_dm_open(pubkeys: &[&str]) -> Result<EventBuilder, SdkError> {
         let validated = check_pubkey_hex(pk, "pubkey")?;
         tags.push(tag(&["p", &validated])?);
     }
-    Ok(EventBuilder::new(Kind::Custom(KIND_DM_OPEN as u16), "").tags(tags).allow_self_tagging())
+    Ok(EventBuilder::new(Kind::Custom(KIND_DM_OPEN as u16), "")
+        .tags(tags)
+        .allow_self_tagging())
 }
 
 /// Build a DM add-member event (kind 41011).
@@ -1944,7 +1950,11 @@ pub fn build_dm_open(pubkeys: &[&str]) -> Result<EventBuilder, SdkError> {
 pub fn build_dm_add_member(channel_id: Uuid, pubkey: &str) -> Result<EventBuilder, SdkError> {
     let pk = check_pubkey_hex(pubkey, "pubkey")?;
     let tags = vec![tag(&["h", &channel_id.to_string()])?, tag(&["p", &pk])?];
-    Ok(EventBuilder::new(Kind::Custom(KIND_DM_ADD_MEMBER as u16), "").tags(tags).allow_self_tagging())
+    Ok(
+        EventBuilder::new(Kind::Custom(KIND_DM_ADD_MEMBER as u16), "")
+            .tags(tags)
+            .allow_self_tagging(),
+    )
 }
 
 /// Build a presence update event (kind 20001).

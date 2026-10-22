@@ -68,7 +68,9 @@ pub async fn cmd_open_dm(client: &BuzzClient, pubkeys: &[String]) -> Result<(), 
         .map(|pk| Tag::parse(["p", *pk]).map_err(|e| CliError::Other(format!("tag error: {e}"))))
         .collect::<Result<Vec<_>, _>>()?;
     tags.push(Tag::parse(["d", &dm_id]).map_err(|e| CliError::Other(format!("tag error: {e}")))?);
-    let builder = EventBuilder::new(Kind::Custom(41010), "").tags(tags).allow_self_tagging();
+    let builder = EventBuilder::new(Kind::Custom(41010), "")
+        .tags(tags)
+        .allow_self_tagging();
     let event = client.sign_event(builder)?;
 
     let resp = client.submit_event(event).await?;
