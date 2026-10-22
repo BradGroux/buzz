@@ -43,13 +43,9 @@ before(async () => {
   // Do NOT override Node's native File — jsdom's File lacks `.text()`,
   // which the component's handleFiles calls. Node's File has it.
 
-  ({
-    act,
-    cleanup,
-    fireEvent,
-    render,
-    waitFor,
-  } = await import("@testing-library/react"));
+  ({ act, cleanup, fireEvent, render, waitFor } = await import(
+    "@testing-library/react"
+  ));
   ({ createElement } = await import("react"));
   ({ NostrKeyImportForm } = await import("./NostrKeyImportForm.tsx"));
 });
@@ -164,7 +160,10 @@ test("selecting a file with a valid raw nsec in backup mode shows the identity p
   const submitButton = container.querySelector(
     '[data-testid="nostr-import-submit"]',
   );
-  assert.ok(submitButton, "submit button must render after loading a valid raw nsec");
+  assert.ok(
+    submitButton,
+    "submit button must render after loading a valid raw nsec",
+  );
   assert.ok(
     !submitButton.disabled,
     "submit button must be enabled when a valid raw nsec is loaded",
@@ -212,7 +211,9 @@ test("submitting a valid raw nsec in backup mode fires onImport with the key (re
     '[data-testid="nostr-import-submit"]',
   );
   await act(async () => {
-    submitButton.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+    submitButton.dispatchEvent(
+      new dom.window.MouseEvent("click", { bubbles: true }),
+    );
   });
 
   // Verify the onImport callback received the raw nsec.
