@@ -252,7 +252,7 @@ fn resolve_shell_falls_through_to_passwd_not_the_default() {
 /// binary. With `getpwuid_r` every call owns its storage, so this guard
 /// checks agreement; under the old code it exercises the interleaving that
 /// flaked CI, at higher intensity. macOS `getpwuid` returns thread-specific
-/// storage, so a green pass here does not clear the Linux defect — Linux CI
+/// storage, so a green pass here does not clear the Linux defect — Linux
 /// runtime validation is still needed.
 #[test]
 fn passwd_shell_concurrent_reads_agree() {
@@ -261,7 +261,7 @@ fn passwd_shell_concurrent_reads_agree() {
     // Concurrent reads must still agree, including the missing-entry case.
 
     let readers: Vec<_> = (0..8)
-        .map(|_| std::thread::spawn(|| crate::shell::passwd_shell()))
+        .map(|_| std::thread::spawn(crate::shell::passwd_shell))
         .collect();
     for reader in readers {
         let read = reader.join().expect("passwd reader thread");
