@@ -67,7 +67,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { useMessageAgentAddressPrefix } from "./MessageAgentAddressPrefix";
 const DiffMessage = React.lazy(() => import("./DiffMessage"));
 const DiffMessageExpanded = React.lazy(() => import("./DiffMessageExpanded"));
-const JobResultCard = React.lazy(() => import("./JobResultCard"));
+const JobResultCard = React.lazy(() =>
+  import("./JobResultCard").then(({ JobResultCard }) => ({
+    default: JobResultCard,
+  })),
+);
 export type ThreadDepthGuideAction = {
   active?: boolean;
   depth: number;
@@ -404,19 +408,16 @@ export const MessageRow = React.memo(
             fallbackText={waveMessage.fallbackText}
             huddleMemberPubkeys={huddleMemberPubkeys}
             huddleMemberPubkeysPending={huddleMemberPubkeysPending}
+            searchQuery={searchQuery}
           />
         );
       }
 
-      const reviewRootEventId = videoReviewCommentRootId;
-      const reviewTimecode = reviewRootEventId
-        ? parseVideoReviewTimecode(message.body)
-        : null;
-      const markdown = (
-        <Markdown
+      return (
+        <VideoReviewCommentMarkdown
           channelNames={channelNames}
           className={cn(
-            "max-w-full text-sm",
+            "max-w-full text-message",
             emojiOnly &&
               "text-4xl leading-tight [&_p]:leading-tight [&_img[data-custom-emoji]]:h-[1.45em] [&_img[data-custom-emoji]]:align-middle [&_button:has(img[data-custom-emoji])]:align-middle",
           )}
@@ -428,10 +429,11 @@ export const MessageRow = React.memo(
             message,
             isKnownAgentPubkey,
           )}
-          content={reviewTimecode?.text ?? message.body}
+          content={message.body}
           messageId={message.id}
           linkPreviewsSuppressed={linkPreviewsSuppressed}
           linkPreviewTags={message.tags}
+          leadingInlineContent={agentAddressPrefix}
           onRemoveLinkPreviewsForEveryone={removeLinkPreviewsForEveryone}
           customEmoji={customEmoji}
           imetaByUrl={imetaByUrl}
@@ -440,25 +442,9 @@ export const MessageRow = React.memo(
           mentionPubkeysByName={mentionPubkeysByName}
           searchQuery={searchQuery}
           snapshotSharedBy={snapshotSharedBy}
+          videoReviewCommentRootId={videoReviewCommentRootId}
           videoReviewContext={videoReviewContext}
         />
-      );
-      if (!reviewRootEventId || !reviewTimecode || !openVideoReviewAt) {
-        return markdown;
-      }
-
-      return (
-        <div className="flex min-w-0 items-start gap-1.5">
-          <VideoReviewTimecodeButton
-            surface="message"
-            timecode={reviewTimecode.timecode}
-            onClick={(event) => {
-              event.stopPropagation();
-              openVideoReviewAt(reviewRootEventId, reviewTimecode.seconds);
-            }}
-          />
-          <div className="min-w-0 flex-1">{markdown}</div>
-        </div>
       );
     };
 
@@ -500,53 +486,6 @@ export const MessageRow = React.memo(
             <JobResultCard result={structuredJobResult} />
           ) : (
             renderDefaultBody()
-          );
-        default: {
-          const waveMessage = parseWaveMessageContent(message.body);
-          if (waveMessage) {
-            return (
-              <WaveMessageAttachment
-                channelId={channelId}
-                fallbackText={waveMessage.fallbackText}
-                huddleMemberPubkeys={huddleMemberPubkeys}
-                huddleMemberPubkeysPending={huddleMemberPubkeysPending}
-                searchQuery={searchQuery}
-              />
-            );
-          }
-
-          return (
-            <VideoReviewCommentMarkdown
-              channelNames={channelNames}
-              className={cn(
-                "max-w-full text-message",
-                emojiOnly &&
-                  "text-4xl leading-tight [&_p]:leading-tight [&_img[data-custom-emoji]]:h-[1.45em] [&_img[data-custom-emoji]]:align-middle [&_button:has(img[data-custom-emoji])]:align-middle",
-              )}
-              // Only pass the author pubkey for agent-authored messages so
-              // config-nudge cards can authenticate the sender. Uses the
-              // raw event signer (signerPubkey), not a relay-delegated display
-              // author, because the agent itself must have signed the card.
-              configNudgeAuthorPubkey={getConfigNudgeAuthorPubkey(
-                message,
-                isKnownAgentPubkey,
-              )}
-              content={message.body}
-              messageId={message.id}
-              linkPreviewsSuppressed={linkPreviewsSuppressed}
-              linkPreviewTags={message.tags}
-              leadingInlineContent={agentAddressPrefix}
-              onRemoveLinkPreviewsForEveryone={removeLinkPreviewsForEveryone}
-              customEmoji={customEmoji}
-              imetaByUrl={imetaByUrl}
-              agentMentionPubkeysByName={agentMentionPubkeysByName}
-              mentionNames={mentionNames}
-              mentionPubkeysByName={mentionPubkeysByName}
-              searchQuery={searchQuery}
-              snapshotSharedBy={snapshotSharedBy}
-              videoReviewCommentRootId={videoReviewCommentRootId}
-              videoReviewContext={videoReviewContext}
-            />
           );
         default:
           return renderDefaultBody();

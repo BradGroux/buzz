@@ -2371,7 +2371,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn messages_thread_accepts_link_or_explicit_identifiers() {
         let channel = "123e4567-e89b-12d3-a456-426614174000";
         let event = "a".repeat(64);
