@@ -123,7 +123,7 @@ pub(crate) fn passwd_shell() -> Option<String> {
     // is pathological (entries are a few hundred bytes); the bound guarantees
     // termination and bounds the allocation a broken backend can force.
     const MAX_BUF: usize = 1024 * 1024;
-    let mut buf_size = initial_size;
+    let mut buf_size = initial_size.min(MAX_BUF);
 
     loop {
         let mut buf = vec![0u8; buf_size];
